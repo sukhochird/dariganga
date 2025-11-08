@@ -1,44 +1,46 @@
 from django.contrib import admin
-from .models import Category, Subcategory, Product, ProductImage, LandingPageContent
+from .models import Category, Product, Banner, LandingPageContent, SubCategory, ProductImage
+
+
+@admin.register(Category)
+class CategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'slug', 'sort_order']
+    list_filter = []
+    search_fields = ['name', 'slug']
+    prepopulated_fields = {'slug': ('name',)}
+    ordering = ['sort_order', 'name']
+
+
+@admin.register(SubCategory)
+class SubCategoryAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'slug', 'sort_order']
+    list_filter = ['category']
+    search_fields = ['name', 'slug', 'category__name']
+    prepopulated_fields = {'slug': ('name',)}
+    ordering = ['category__name', 'sort_order', 'name']
 
 
 class ProductImageInline(admin.TabularInline):
     model = ProductImage
     extra = 1
-
-
-@admin.register(Category)
-class CategoryAdmin(admin.ModelAdmin):
-    list_display = ['name', 'sort_order', 'is_active', 'created_at']
-    list_filter = ['is_active', 'created_at']
-    search_fields = ['name', 'description']
-    prepopulated_fields = {'slug': ('name',)}
-    ordering = ['sort_order', 'name']
-
-
-@admin.register(Subcategory)
-class SubcategoryAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category', 'sort_order', 'is_active', 'created_at']
-    list_filter = ['category', 'is_active', 'created_at']
-    search_fields = ['name', 'description']
-    prepopulated_fields = {'slug': ('name',)}
-    ordering = ['sort_order', 'name']
+    fields = ('image', 'sort_order')
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['name', 'category', 'subcategory', 'price', 'stock_quantity', 'is_featured', 'is_active']
-    list_filter = ['category', 'subcategory', 'is_featured', 'is_active', 'created_at']
-    search_fields = ['name', 'description']
+    list_display = ['name', 'category', 'subcategory', 'slug', 'created_at']
+    list_filter = ['category', 'subcategory', 'created_at']
+    search_fields = ['name', 'description', 'slug', 'subcategory__name']
     prepopulated_fields = {'slug': ('name',)}
-    inlines = [ProductImageInline]
     ordering = ['-created_at']
+    inlines = [ProductImageInline]
 
 
-@admin.register(ProductImage)
-class ProductImageAdmin(admin.ModelAdmin):
-    list_display = ['product', 'is_main', 'sort_order', 'created_at']
-    list_filter = ['is_main', 'created_at']
+@admin.register(Banner)
+class BannerAdmin(admin.ModelAdmin):
+    list_display = ['id', 'order', 'created_at']
+    list_editable = ['order']
+    ordering = ['order', 'id']
 
 
 @admin.register(LandingPageContent)

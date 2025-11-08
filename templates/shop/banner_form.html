@@ -1,0 +1,53 @@
+{% extends 'shop/base.html' %}
+
+{% block title %}{{ action }} Баннер - E-Commerce Admin{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-3xl font-bold text-gray-900">{{ action }} Баннер</h1>
+    <p class="mt-1 text-sm text-gray-600">Нүүр хуудсан дээр харагдах баннерыг бий болгох болон засварлах</p>
+</div>
+
+<div class="max-w-2xl">
+    <form method="post" enctype="multipart/form-data" class="bg-white shadow sm:rounded-lg">
+        {% csrf_token %}
+        <div class="px-4 py-5 sm:p-6 space-y-6">
+            <div>
+                <label for="{{ form.image.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Баннер зураг <span class="text-red-500">*</span>
+                </label>
+                {% if banner and banner.image %}
+                    <div class="mt-2 mb-3">
+                        <img src="{{ banner.image.url }}" alt="Баннер {{ banner.pk }}" class="h-32 w-full object-cover rounded-md border">
+                    </div>
+                {% endif %}
+                {{ form.image }}
+                {% if form.image.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.image.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <div>
+                <label for="{{ form.order.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Эрэмбэ
+                </label>
+                {{ form.order }}
+                <p class="mt-1 text-xs text-gray-500">Бага тоо нь хамгийн түрүүнд харагдана.</p>
+                {% if form.order.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.order.errors.0 }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="px-4 py-3 bg-gray-50 text-right sm:px-6 space-x-3">
+            <a href="{% url 'banner_list' %}" class="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50">
+                Болих
+            </a>
+            <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700">
+                Хадгалах
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

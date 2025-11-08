@@ -3,15 +3,12 @@ from django.utils.text import slugify
 
 
 class Category(models.Model):
-    """Category model with name, sort order, and image"""
+    """Top-level product category."""
+
     name = models.CharField(max_length=200, verbose_name="Нэр")
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     sort_order = models.IntegerField(default=0, verbose_name="Эрэмбэ")
-    image = models.ImageField(upload_to='categories/', null=True, blank=True, verbose_name="Зураг")
-    description = models.TextField(blank=True, verbose_name="Тайлбар")
-    is_active = models.BooleanField(default=True, verbose_name="Идэвхтэй")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Үүсгэсэн огноо")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Засварласан огноо")
+    image = models.ImageField(upload_to='categories/', blank=True, null=True, verbose_name="Зураг")
 
     class Meta:
         verbose_name = "Ангилал"
@@ -20,24 +17,31 @@ class Category(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
+            base_slug = slugify(self.name)
+            slug_candidate = base_slug
+            counter = 1
+            while Category.objects.exclude(pk=self.pk).filter(slug=slug_candidate).exists():
+                slug_candidate = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug_candidate
         super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
 
 
-class Subcategory(models.Model):
-    """Subcategory model linked to Category"""
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='subcategories', verbose_name="Ангилал")
+class SubCategory(models.Model):
+    """Second-level category within a category."""
+
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name='subcategories',
+        verbose_name="Ангилал",
+    )
     name = models.CharField(max_length=200, verbose_name="Нэр")
     slug = models.SlugField(max_length=200, unique=True, blank=True)
     sort_order = models.IntegerField(default=0, verbose_name="Эрэмбэ")
-    image = models.ImageField(upload_to='subcategories/', null=True, blank=True, verbose_name="Зураг")
-    description = models.TextField(blank=True, verbose_name="Тайлбар")
-    is_active = models.BooleanField(default=True, verbose_name="Идэвхтэй")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Үүсгэсэн огноо")
-    updated_at = models.DateTimeField(auto_now=True, verbose_name="Засварласан огноо")
 
     class Meta:
         verbose_name = "Дэд ангилал"
@@ -46,27 +50,40 @@ class Subcategory(models.Model):
 
     def save(self, *args, **kwargs):
         if not self.slug:
-            self.slug = slugify(self.name)
+            base_slug = slugify(self.name)
+            slug_candidate = base_slug
+            counter = 1
+            while SubCategory.objects.exclude(pk=self.pk).filter(slug=slug_candidate).exists():
+                slug_candidate = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug_candidate
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.category.name} - {self.name}"
+        return f"{self.category.name} / {self.name}"
 
 
 class Product(models.Model):
-    """Product model with multiple images and specifications"""
-    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name='products', verbose_name="Ангилал")
-    subcategory = models.ForeignKey(Subcategory, on_delete=models.SET_NULL, null=True, blank=True, related_name='products', verbose_name="Дэд ангилал")
-    name = models.CharField(max_length=300, verbose_name="Нэр")
+    """Product linked to a single category with optional gallery URLs."""
+
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.CASCADE,
+        related_name='products',
+        verbose_name="Ангилал",
+    )
+    subcategory = models.ForeignKey(
+        SubCategory,
+        on_delete=models.SET_NULL,
+        related_name='products',
+        verbose_name="Дэд ангилал",
+        null=True,
+        blank=True,
+    )
     slug = models.SlugField(max_length=300, unique=True, blank=True)
-    description = models.TextField(verbose_name="Танилцуулга")
-    specifications = models.TextField(blank=True, help_text="Үзүүлэлтүүдийг мөр мөрөөр нь оруулна уу", verbose_name="Үзүүлэлтүүд")
-    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Үнэ")
-    sale_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Хямдралтай үнэ")
-    stock_quantity = models.IntegerField(default=0, verbose_name="Нөөц")
-    is_featured = models.BooleanField(default=False, verbose_name="Онцлох бүтээгдэхүүн")
-    is_active = models.BooleanField(default=True, verbose_name="Идэвхтэй")
-    sort_order = models.IntegerField(default=0, verbose_name="Эрэмбэ")
+    name = models.CharField(max_length=300, verbose_name="Нэр")
+    image = models.ImageField(upload_to='products/', blank=True, null=True, verbose_name="Үндсэн зураг")
+    description = models.TextField(blank=True, verbose_name="Тайлбар")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Үүсгэсэн огноо")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Засварласан огноо")
 
@@ -76,45 +93,59 @@ class Product(models.Model):
         ordering = ['-created_at']
 
     def save(self, *args, **kwargs):
+        if self.subcategory and self.category_id != self.subcategory.category_id:
+            self.category = self.subcategory.category
         if not self.slug:
-            self.slug = slugify(self.name)
+            base_slug = slugify(self.name)
+            slug_candidate = base_slug
+            counter = 1
+            while Product.objects.exclude(pk=self.pk).filter(slug=slug_candidate).exists():
+                slug_candidate = f"{base_slug}-{counter}"
+                counter += 1
+            self.slug = slug_candidate
         super().save(*args, **kwargs)
 
     def __str__(self):
         return self.name
 
-    @property
-    def main_image(self):
-        """Get the first image as main image"""
-        return self.images.filter(is_main=True).first() or self.images.first()
-
-    @property
-    def current_price(self):
-        """Return sale price if available, otherwise regular price"""
-        return self.sale_price if self.sale_price else self.price
-
 
 class ProductImage(models.Model):
-    """Multiple images for a product"""
-    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='images', verbose_name="Бүтээгдэхүүн")
-    image = models.ImageField(upload_to='products/', verbose_name="Зураг")
-    is_main = models.BooleanField(default=False, verbose_name="Үндсэн зураг")
-    sort_order = models.IntegerField(default=0, verbose_name="Эрэмбэ")
+    """Additional product gallery images."""
+
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='images',
+        verbose_name="Бүтээгдэхүүн",
+    )
+    image = models.ImageField(upload_to='products/gallery/', verbose_name="Зураг")
+    sort_order = models.PositiveIntegerField(default=0, verbose_name="Эрэмбэ")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Үүсгэсэн огноо")
 
     class Meta:
         verbose_name = "Бүтээгдэхүүний зураг"
         verbose_name_plural = "Бүтээгдэхүүний зургууд"
-        ordering = ['sort_order']
+        ordering = ['sort_order', 'id']
 
     def __str__(self):
-        return f"{self.product.name} - Image {self.id}"
+        return f"{self.product.name} зураг #{self.pk}"
 
-    def save(self, *args, **kwargs):
-        # If this is set as main image, unset others
-        if self.is_main:
-            ProductImage.objects.filter(product=self.product, is_main=True).update(is_main=False)
-        super().save(*args, **kwargs)
+
+class Banner(models.Model):
+    """Homepage banners displayed in a specific order."""
+
+    image = models.ImageField(upload_to='banners/', verbose_name="Зураг")
+    order = models.IntegerField(default=0, verbose_name="Эрэмбэ")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Үүсгэсэн огноо")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Засварласан огноо")
+
+    class Meta:
+        verbose_name = "Баннер"
+        verbose_name_plural = "Баннерууд"
+        ordering = ['order', 'id']
+
+    def __str__(self):
+        return f"Banner #{self.pk}"
 
 
 class LandingPageContent(models.Model):

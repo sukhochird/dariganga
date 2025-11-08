@@ -6,6 +6,7 @@
     <title>{% block title %}E-Commerce Admin{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    {% block extra_head %}{% endblock %}
 </head>
 <body class="bg-gray-50">
     {% if user.is_authenticated %}
@@ -23,41 +24,16 @@
             <div class="flex items-center justify-center h-16 bg-indigo-900">
                 <h1 class="text-white text-xl font-bold">E-Commerce Admin</h1>
             </div>
-            <nav class="mt-5 px-2">
-                <a href="{% url 'dashboard' %}" class="group flex items-center px-2 py-2 text-base leading-6 font-medium rounded-md text-white bg-indigo-900 focus:outline-none focus:bg-indigo-700 transition ease-in-out duration-150 mb-1 hover:bg-indigo-700">
+            <nav class="mt-5 px-2 space-y-1">
+                {% for item in sidebar_menu %}
+                <a href="{{ item.url }}"
+                   class="group flex items-center px-2 py-2 text-base leading-6 font-medium rounded-md transition ease-in-out duration-150 {% if item.is_active %}text-white bg-indigo-900 focus:outline-none focus:bg-indigo-700{% else %}text-indigo-100 hover:text-white hover:bg-indigo-700 focus:outline-none focus:text-white focus:bg-indigo-700{% endif %}">
                     <svg class="mr-4 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="{{ item.icon_path }}" />
                     </svg>
-                    Dashboard
+                    {{ item.label }}
                 </a>
-
-                <a href="{% url 'category_list' %}" class="group flex items-center px-2 py-2 text-base leading-6 font-medium rounded-md text-indigo-100 hover:text-white hover:bg-indigo-700 focus:outline-none focus:text-white focus:bg-indigo-700 transition ease-in-out duration-150 mb-1">
-                    <svg class="mr-4 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-                    </svg>
-                    Ангилал &amp; Дэд ангилал
-                </a>
-
-                <a href="{% url 'category_list' %}?tab=subcategories#subcategories" class="group flex items-center px-2 py-2 text-base leading-6 font-medium rounded-md text-indigo-100 hover:text-white hover:bg-indigo-700 focus:outline-none focus:text-white focus:bg-indigo-700 transition ease-in-out duration-150 mb-1">
-                    <svg class="mr-4 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
-                    </svg>
-                    Дэд ангилал
-                </a>
-
-                <a href="{% url 'product_list' %}" class="group flex items-center px-2 py-2 text-base leading-6 font-medium rounded-md text-indigo-100 hover:text-white hover:bg-indigo-700 focus:outline-none focus:text-white focus:bg-indigo-700 transition ease-in-out duration-150 mb-1">
-                    <svg class="mr-4 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                    </svg>
-                    Бүтээгдэхүүнүүд
-                </a>
-
-                <a href="{% url 'landing_content_list' %}" class="group flex items-center px-2 py-2 text-base leading-6 font-medium rounded-md text-indigo-100 hover:text-white hover:bg-indigo-700 focus:outline-none focus:text-white focus:bg-indigo-700 transition ease-in-out duration-150 mb-1">
-                    <svg class="mr-4 h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                    </svg>
-                    Landing агуулга
-                </a>
+                {% endfor %}
 
                 <div class="mt-8 pt-4 border-t border-indigo-700">
                     <a href="{% url 'logout' %}" class="group flex items-center px-2 py-2 text-base leading-6 font-medium rounded-md text-indigo-100 hover:text-white hover:bg-indigo-700 focus:outline-none focus:text-white focus:bg-indigo-700 transition ease-in-out duration-150">

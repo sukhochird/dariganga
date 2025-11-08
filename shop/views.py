@@ -1,25 +1,32 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
-from django.db.models import Q, Count
-from django.urls import reverse
-from django.utils.http import urlencode
-from .models import Category, Subcategory, Product, ProductImage, LandingPageContent
-from .forms import CategoryForm, SubcategoryForm, ProductForm, ProductImageForm, LandingPageContentForm
+from django.db import transaction
+from django.db.models import Q, Count, Max
+from django.forms import inlineformset_factory
+from rest_framework import viewsets
+
+from .models import Category, Product, Banner, LandingPageContent, SubCategory, ProductImage
+from .forms import CategoryForm, SubCategoryForm, ProductForm, LandingPageContentForm, BannerForm
+from .serializers import CategorySerializer, ProductSerializer, BannerSerializer
 
 
 @login_required
 def dashboard(request):
     """Main admin dashboard"""
+    top_level_categories = Category.objects.all().order_by('sort_order', 'name')
+
     context = {
-        'total_categories': Category.objects.count(),
-        'total_subcategories': Subcategory.objects.count(),
+        'total_categories': top_level_categories.count(),
+        'total_subcategories': SubCategory.objects.count(),
         'total_products': Product.objects.count(),
+        'total_banners': Banner.objects.count(),
         'total_landing_contents': LandingPageContent.objects.count(),
-        'active_products': Product.objects.filter(is_active=True).count(),
-        'featured_products': Product.objects.filter(is_featured=True).count(),
-        'recent_products': Product.objects.all()[:5],
-        'low_stock_products': Product.objects.filter(stock_quantity__lt=10).order_by('stock_quantity')[:5],
+        'recent_products': Product.objects.select_related('category', 'subcategory').order_by('-created_at')[:5],
+        'top_categories': top_level_categories.annotate(
+            product_total=Count('products'),
+            subcategory_count=Count('subcategories')
+        ).order_by('-product_total', 'name')[:5],
     }
     return render(request, 'shop/dashboard.html', context)
 
@@ -28,87 +35,27 @@ def dashboard(request):
 @login_required
 def category_list(request):
     """Manage categories and subcategories from a single page"""
-    active_tab = request.GET.get('tab', 'categories')
     category_search = request.GET.get('category_search', '')
-    subcategory_search = request.GET.get('subcategory_search', '')
-    subcategory_category = request.GET.get('subcategory_category', '')
 
-    categories_qs = Category.objects.all()
+    categories = Category.objects.all()
     if category_search:
-        categories_qs = categories_qs.filter(
-            Q(name__icontains=category_search) |
-            Q(description__icontains=category_search)
-        )
-    categories = categories_qs.annotate(
-        product_count=Count('products')
-    ).order_by('sort_order', 'name')
-
-    subcategories_qs = Subcategory.objects.select_related('category')
-    if subcategory_search:
-        subcategories_qs = subcategories_qs.filter(
-            Q(name__icontains=subcategory_search) |
-            Q(description__icontains=subcategory_search)
-        )
-    if subcategory_category:
-        subcategories_qs = subcategories_qs.filter(category_id=subcategory_category)
-    subcategories = subcategories_qs.annotate(
-        product_count=Count('products')
-    ).order_by('sort_order', 'name')
-
-    category_form = CategoryForm()
-    subcategory_form = SubcategoryForm()
-
-    if request.method == 'POST':
-        category_search = request.POST.get('category_search', category_search)
-        subcategory_search = request.POST.get('subcategory_search', subcategory_search)
-        subcategory_category = request.POST.get('subcategory_category', subcategory_category)
-        active_tab = request.POST.get('tab', active_tab)
-        form_type = request.POST.get('form_type')
-        redirect_params = {
-            'category_search': request.POST.get('category_search', ''),
-            'subcategory_search': request.POST.get('subcategory_search', ''),
-            'subcategory_category': request.POST.get('subcategory_category', ''),
-        }
-
-        if form_type == 'category':
-            category_form = CategoryForm(request.POST, request.FILES)
-            active_tab = 'categories'
-            redirect_params['tab'] = 'categories'
-
-            if category_form.is_valid():
-                category_form.save()
-                messages.success(request, 'Ангилал амжилттай үүслээ!')
-                query_string = urlencode({k: v for k, v in redirect_params.items() if v})
-                redirect_url = reverse('category_list')
-                if query_string:
-                    redirect_url = f"{redirect_url}?{query_string}"
-                return redirect(f"{redirect_url}#categories")
-        elif form_type == 'subcategory':
-            subcategory_form = SubcategoryForm(request.POST, request.FILES)
-            active_tab = 'subcategories'
-            redirect_params['tab'] = 'subcategories'
-
-            if subcategory_form.is_valid():
-                subcategory_form.save()
-                messages.success(request, 'Дэд ангилал амжилттай үүслээ!')
-                query_string = urlencode({k: v for k, v in redirect_params.items() if v})
-                redirect_url = reverse('category_list')
-                if query_string:
-                    redirect_url = f"{redirect_url}?{query_string}"
-                return redirect(f"{redirect_url}#subcategories")
+        categories = categories.filter(name__icontains=category_search)
+    categories = categories.annotate(subcategory_count=Count('subcategories')).prefetch_related('subcategories').order_by('sort_order', 'name')
 
     context = {
         'categories': categories,
-        'subcategories': subcategories,
-        'category_form': category_form,
-        'subcategory_form': subcategory_form,
         'category_search': category_search,
-        'subcategory_search': subcategory_search,
-        'subcategory_category': subcategory_category,
-        'active_tab': active_tab,
-        'all_categories': Category.objects.order_by('name'),
     }
     return render(request, 'shop/category_list.html', context)
+
+
+SubCategoryFormSet = inlineformset_factory(
+    Category,
+    SubCategory,
+    form=SubCategoryForm,
+    extra=1,
+    can_delete=True,
+)
 
 
 @login_required
@@ -116,106 +63,72 @@ def category_create(request):
     """Create a new category"""
     if request.method == 'POST':
         form = CategoryForm(request.POST, request.FILES)
-        if form.is_valid():
-            form.save()
+        dummy_instance = Category()
+        formset = SubCategoryFormSet(request.POST, request.FILES, instance=dummy_instance, prefix='subcategories')
+
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                category = form.save()
+                formset.instance = category
+                formset.save()
             messages.success(request, 'Ангилал амжилттай үүслээ!')
             return redirect('category_list')
     else:
         form = CategoryForm()
-    
-    return render(request, 'shop/category_form.html', {'form': form, 'action': 'Үүсгэх'})
+        formset = SubCategoryFormSet(instance=Category(), prefix='subcategories')
+
+    return render(
+        request,
+        'shop/category_form.html',
+        {
+            'form': form,
+            'formset': formset,
+            'action': 'Үүсгэх',
+        },
+    )
 
 
 @login_required
 def category_edit(request, pk):
     """Edit an existing category"""
     category = get_object_or_404(Category, pk=pk)
-    
+
     if request.method == 'POST':
         form = CategoryForm(request.POST, request.FILES, instance=category)
-        if form.is_valid():
-            form.save()
+        formset = SubCategoryFormSet(request.POST, request.FILES, instance=category, prefix='subcategories')
+        if form.is_valid() and formset.is_valid():
+            with transaction.atomic():
+                form.save()
+                formset.save()
             messages.success(request, 'Ангилал амжилттай засагдлаа!')
             return redirect('category_list')
     else:
         form = CategoryForm(instance=category)
-    
-    return render(request, 'shop/category_form.html', {'form': form, 'action': 'Засах', 'category': category})
+        formset = SubCategoryFormSet(instance=category, prefix='subcategories')
+
+    return render(
+        request,
+        'shop/category_form.html',
+        {
+            'form': form,
+            'formset': formset,
+            'action': 'Засах',
+            'category': category,
+        },
+    )
 
 
 @login_required
 def category_delete(request, pk):
     """Delete a category"""
     category = get_object_or_404(Category, pk=pk)
-    
+
     if request.method == 'POST':
         category.delete()
         messages.success(request, 'Ангилал амжилттай устгагдлаа!')
         return redirect('category_list')
-    
+
     return render(request, 'shop/category_confirm_delete.html', {'category': category})
-
-
-# Subcategory Views
-@login_required
-def subcategory_list(request):
-    """Redirect to unified category management page with subcategory tab active"""
-    redirect_params = {
-        'tab': 'subcategories',
-        'subcategory_search': request.GET.get('search', ''),
-        'subcategory_category': request.GET.get('category', ''),
-        'category_search': request.GET.get('category_search', ''),
-    }
-    query_string = urlencode({k: v for k, v in redirect_params.items() if v})
-    redirect_url = reverse('category_list')
-    if query_string:
-        redirect_url = f"{redirect_url}?{query_string}"
-    return redirect(f"{redirect_url}#subcategories")
-
-
-@login_required
-def subcategory_create(request):
-    """Create a new subcategory"""
-    if request.method == 'POST':
-        form = SubcategoryForm(request.POST, request.FILES)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Дэд ангилал амжилттай үүслээ!')
-            return redirect('subcategory_list')
-    else:
-        form = SubcategoryForm()
-    
-    return render(request, 'shop/subcategory_form.html', {'form': form, 'action': 'Үүсгэх'})
-
-
-@login_required
-def subcategory_edit(request, pk):
-    """Edit an existing subcategory"""
-    subcategory = get_object_or_404(Subcategory, pk=pk)
-    
-    if request.method == 'POST':
-        form = SubcategoryForm(request.POST, request.FILES, instance=subcategory)
-        if form.is_valid():
-            form.save()
-            messages.success(request, 'Дэд ангилал амжилттай засагдлаа!')
-            return redirect('subcategory_list')
-    else:
-        form = SubcategoryForm(instance=subcategory)
-    
-    return render(request, 'shop/subcategory_form.html', {'form': form, 'action': 'Засах', 'subcategory': subcategory})
-
-
-@login_required
-def subcategory_delete(request, pk):
-    """Delete a subcategory"""
-    subcategory = get_object_or_404(Subcategory, pk=pk)
-    
-    if request.method == 'POST':
-        subcategory.delete()
-        messages.success(request, 'Дэд ангилал амжилттай устгагдлаа!')
-        return redirect('subcategory_list')
-    
-    return render(request, 'shop/subcategory_confirm_delete.html', {'subcategory': subcategory})
 
 
 # Product Views
@@ -223,35 +136,31 @@ def subcategory_delete(request, pk):
 def product_list(request):
     """List all products"""
     search_query = request.GET.get('search', '')
-    category_filter = request.GET.get('category', '')
-    subcategory_filter = request.GET.get('subcategory', '')
-    
+    category_slug = request.GET.get('category', '')
+    subcategory_slug = request.GET.get('subcategory', '')
+
     products = Product.objects.select_related('category', 'subcategory').prefetch_related('images')
-    
+
     if search_query:
         products = products.filter(
-            Q(name__icontains=search_query) | 
+            Q(name__icontains=search_query) |
             Q(description__icontains=search_query)
         )
-    
-    if category_filter:
-        products = products.filter(category_id=category_filter)
-    
-    if subcategory_filter:
-        products = products.filter(subcategory_id=subcategory_filter)
-    
+
+    if category_slug:
+        products = products.filter(category__slug=category_slug)
+    if subcategory_slug:
+        products = products.filter(subcategory__slug=subcategory_slug)
+
     products = products.order_by('-created_at')
-    
-    categories = Category.objects.all()
-    subcategories = Subcategory.objects.all()
-    
+
     context = {
         'products': products,
-        'categories': categories,
-        'subcategories': subcategories,
+        'categories': Category.objects.all().order_by('sort_order', 'name'),
+        'subcategories': SubCategory.objects.select_related('category').order_by('category__name', 'name'),
         'search_query': search_query,
-        'category_filter': category_filter,
-        'subcategory_filter': subcategory_filter,
+        'category_filter': category_slug,
+        'subcategory_filter': subcategory_slug,
     }
     return render(request, 'shop/product_list.html', context)
 
@@ -260,60 +169,69 @@ def product_list(request):
 def product_create(request):
     """Create a new product"""
     if request.method == 'POST':
-        form = ProductForm(request.POST)
+        form = ProductForm(request.POST, request.FILES)
         if form.is_valid():
             product = form.save()
-            
-            # Handle multiple image uploads
-            images = request.FILES.getlist('images')
-            for i, image in enumerate(images):
-                ProductImage.objects.create(
-                    product=product,
-                    image=image,
-                    is_main=(i == 0),
-                    sort_order=i
-                )
-            
+            new_images = request.FILES.getlist('additional_images')
+            if new_images:
+                max_order = product.images.aggregate(max_order=Max('sort_order'))['max_order']
+                next_order = (max_order + 1) if max_order is not None else 0
+                for offset, image_file in enumerate(new_images):
+                    ProductImage.objects.create(
+                        product=product,
+                        image=image_file,
+                        sort_order=next_order + offset,
+                    )
             messages.success(request, 'Бүтээгдэхүүн амжилттай үүслээ!')
             return redirect('product_list')
     else:
         form = ProductForm()
-    
-    return render(request, 'shop/product_form.html', {'form': form, 'action': 'Үүсгэх'})
+
+    return render(
+        request,
+        'shop/product_form.html',
+        {
+            'form': form,
+            'action': 'Үүсгэх',
+            'product': None,
+            'gallery': [],
+        },
+    )
 
 
 @login_required
 def product_edit(request, pk):
     """Edit an existing product"""
     product = get_object_or_404(Product, pk=pk)
-    
+
     if request.method == 'POST':
-        form = ProductForm(request.POST, instance=product)
+        form = ProductForm(request.POST, request.FILES, instance=product)
         if form.is_valid():
-            form.save()
-            
-            # Handle new image uploads
-            images = request.FILES.getlist('images')
-            if images:
-                current_count = product.images.count()
-                for i, image in enumerate(images):
+            product = form.save()
+            delete_ids = request.POST.getlist('delete_images')
+            if delete_ids:
+                ProductImage.objects.filter(product=product, id__in=delete_ids).delete()
+
+            new_images = request.FILES.getlist('additional_images')
+            if new_images:
+                max_order = product.images.aggregate(max_order=Max('sort_order'))['max_order']
+                next_order = (max_order + 1) if max_order is not None else 0
+                for offset, image_file in enumerate(new_images):
                     ProductImage.objects.create(
                         product=product,
-                        image=image,
-                        is_main=(current_count == 0 and i == 0),
-                        sort_order=current_count + i
+                        image=image_file,
+                        sort_order=next_order + offset,
                     )
-            
             messages.success(request, 'Бүтээгдэхүүн амжилттай засагдлаа!')
             return redirect('product_list')
     else:
         form = ProductForm(instance=product)
-    
+
     context = {
         'form': form,
         'action': 'Засах',
         'product': product,
-        'images': product.images.all()
+        'gallery': product.images.all(),
     }
     return render(request, 'shop/product_form.html', context)
 
@@ -322,27 +240,13 @@ def product_edit(request, pk):
 def product_delete(request, pk):
     """Delete a product"""
     product = get_object_or_404(Product, pk=pk)
-    
+
     if request.method == 'POST':
         product.delete()
         messages.success(request, 'Бүтээгдэхүүн амжилттай устгагдлаа!')
         return redirect('product_list')
-    
+
     return render(request, 'shop/product_confirm_delete.html', {'product': product})
-
-
-@login_required
-def product_image_delete(request, pk):
-    """Delete a product image"""
-    image = get_object_or_404(ProductImage, pk=pk)
-    product_id = image.product.id
-    
-    if request.method == 'POST':
-        image.delete()
-        messages.success(request, 'Зураг амжилттай устгагдлаа!')
-        return redirect('product_edit', pk=product_id)
-    
-    return render(request, 'shop/image_confirm_delete.html', {'image': image})
 
 
 # Landing Page Content Views
@@ -351,20 +255,20 @@ def landing_content_list(request):
     """List all landing page contents"""
     search_query = request.GET.get('search', '')
     section_filter = request.GET.get('section', '')
-    
+
     contents = LandingPageContent.objects.all()
-    
+
     if search_query:
         contents = contents.filter(
-            Q(title__icontains=search_query) | 
+            Q(title__icontains=search_query) |
             Q(content__icontains=search_query)
         )
-    
+
     if section_filter:
         contents = contents.filter(section_type=section_filter)
-    
+
     contents = contents.order_by('sort_order')
-    
+
     context = {
         'contents': contents,
         'search_query': search_query,
@@ -385,7 +289,7 @@ def landing_content_create(request):
             return redirect('landing_content_list')
     else:
         form = LandingPageContentForm()
-    
+
     return render(request, 'shop/landing_content_form.html', {'form': form, 'action': 'Үүсгэх'})
 
 
@@ -393,7 +297,7 @@ def landing_content_create(request):
 def landing_content_edit(request, pk):
     """Edit an existing landing page content"""
     content = get_object_or_404(LandingPageContent, pk=pk)
-    
+
     if request.method == 'POST':
         form = LandingPageContentForm(request.POST, request.FILES, instance=content)
         if form.is_valid():
@@ -402,7 +306,7 @@ def landing_content_edit(request, pk):
             return redirect('landing_content_list')
     else:
         form = LandingPageContentForm(instance=content)
-    
+
     return render(request, 'shop/landing_content_form.html', {'form': form, 'action': 'Засах', 'content': content})
 
 
@@ -410,10 +314,78 @@ def landing_content_edit(request, pk):
 def landing_content_delete(request, pk):
     """Delete a landing page content"""
     content = get_object_or_404(LandingPageContent, pk=pk)
-    
+
     if request.method == 'POST':
         content.delete()
         messages.success(request, 'Landing хуудасны агуулга амжилттай устгагдлаа!')
         return redirect('landing_content_list')
-    
+
     return render(request, 'shop/landing_content_confirm_delete.html', {'content': content})
+
+
+# API ViewSets
+class BannerViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Banner.objects.all().order_by('order', 'id')
+    serializer_class = BannerSerializer
+
+
+# Banner Views
+@login_required
+def banner_list(request):
+    banners = Banner.objects.all().order_by('order', 'id')
+    return render(request, 'shop/banner_list.html', {'banners': banners})
+
+
+@login_required
+def banner_create(request):
+    if request.method == 'POST':
+        form = BannerForm(request.POST, request.FILES)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Баннер амжилттай үүслээ!')
+            return redirect('banner_list')
+    else:
+        form = BannerForm()
+    return render(request, 'shop/banner_form.html', {'form': form, 'action': 'Үүсгэх'})
+
+
+@login_required
+def banner_edit(request, pk):
+    banner = get_object_or_404(Banner, pk=pk)
+    if request.method == 'POST':
+        form = BannerForm(request.POST, request.FILES, instance=banner)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Баннер амжилттай засагдлаа!')
+            return redirect('banner_list')
+    else:
+        form = BannerForm(instance=banner)
+    return render(request, 'shop/banner_form.html', {'form': form, 'action': 'Засах', 'banner': banner})
+
+
+@login_required
+def banner_delete(request, pk):
+    banner = get_object_or_404(Banner, pk=pk)
+    if request.method == 'POST':
+        banner.delete()
+        messages.success(request, 'Баннер амжилттай устгагдлаа!')
+        return redirect('banner_list')
+    return render(request, 'shop/banner_confirm_delete.html', {'banner': banner})
+
+
+class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = CategorySerializer
+
+    def get_queryset(self):
+        return Category.objects.all().order_by('sort_order', 'name').prefetch_related('subcategories')
+
+
+class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ProductSerializer
+
+    def get_queryset(self):
+        queryset = Product.objects.select_related('category').prefetch_related('images').order_by('-created_at')
+        category_slug = self.request.query_params.get('category')
+        if category_slug:
+            queryset = queryset.filter(category__slug=category_slug)
+        return queryset

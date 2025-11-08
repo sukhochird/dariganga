@@ -5,10 +5,10 @@
 {% block content %}
 <div class="mb-6">
     <h1 class="text-3xl font-bold text-gray-900">{{ action }} Ангилал</h1>
-    <p class="mt-1 text-sm text-gray-600">Ангиллын мэдээллийг оруулна уу</p>
+    <p class="mt-1 text-sm text-gray-600">Ангиллын үндсэн мэдээллийг оруулж, дэд ангиллыг удирдаарай.</p>
 </div>
 
-<div class="max-w-3xl">
+<div class="max-w-5xl">
     <form method="post" enctype="multipart/form-data" class="bg-white shadow sm:rounded-lg">
         {% csrf_token %}
         <div class="px-4 py-5 sm:p-6 space-y-6">
@@ -22,50 +22,146 @@
                 {% endif %}
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-                <div>
+            <div>
+                <label for="{{ form.slug.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                    Slug
+                </label>
+                {{ form.slug }}
+                <p class="mt-1 text-xs text-gray-500">slug-г гараар оруулах боломжтой. Хоосон үлдээвэл нэрнээс автоматаар үүснэ.</p>
+                {% if form.slug.errors %}
+                    <p class="mt-2 text-sm text-red-600">{{ form.slug.errors.0 }}</p>
+                {% endif %}
+            </div>
+
+            <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+                <div class="lg:col-span-1">
                     <label for="{{ form.sort_order.id_for_label }}" class="block text-sm font-medium text-gray-700">
                         Эрэмбэ
                     </label>
                     {{ form.sort_order }}
+                    <p class="mt-1 text-xs text-gray-500">Жагсаалтад бага тоо нь эхэнд байрлана.</p>
                     {% if form.sort_order.errors %}
                         <p class="mt-2 text-sm text-red-600">{{ form.sort_order.errors.0 }}</p>
                     {% endif %}
                 </div>
 
-                <div class="flex items-center pt-6">
-                    <input type="checkbox" id="{{ form.is_active.id_for_label }}" name="is_active" {% if form.is_active.value %}checked{% endif %}
-                           class="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded">
-                    <label for="{{ form.is_active.id_for_label }}" class="ml-2 block text-sm text-gray-900">
-                        Идэвхтэй
+                <div class="lg:col-span-2">
+                    <label for="{{ form.image.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        Зураг
                     </label>
+                    {% if category and category.image %}
+                        <div class="mt-2 mb-3">
+                            <img src="{{ category.image.url }}" alt="{{ category.name }}" class="h-28 w-28 object-cover rounded-lg border border-gray-200">
+                        </div>
+                    {% endif %}
+                    {{ form.image }}
+                    {% if form.image.errors %}
+                        <p class="mt-2 text-sm text-red-600">{{ form.image.errors.0 }}</p>
+                    {% endif %}
                 </div>
             </div>
+        </div>
 
-            <div>
-                <label for="{{ form.description.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                    Тайлбар
-                </label>
-                {{ form.description }}
-                {% if form.description.errors %}
-                    <p class="mt-2 text-sm text-red-600">{{ form.description.errors.0 }}</p>
-                {% endif %}
+        <div class="border-t border-gray-200 px-4 py-5 sm:p-6 space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <h2 class="text-lg font-medium text-gray-900">Дэд ангиллууд</h2>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Ангиллын дотор байх дэд ангиллыг эндээс үүсгэж, засах боломжтой.
+                    </p>
+                </div>
+                <button type="button"
+                        class="mt-4 sm:mt-0 inline-flex items-center rounded-md border border-transparent bg-indigo-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                        data-add-subcategory>
+                    Шинэ дэд ангилал
+                </button>
             </div>
 
-            <div>
-                <label for="{{ form.image.id_for_label }}" class="block text-sm font-medium text-gray-700">
-                    Зураг
-                </label>
-                {% if category.image %}
-                    <div class="mt-2 mb-2">
-                        <img src="{{ category.image.url }}" alt="{{ category.name }}" class="h-32 w-32 rounded-lg object-cover">
+            {{ formset.management_form }}
+            {% if formset.non_form_errors %}
+                <div class="rounded-md bg-red-50 p-4">
+                    <div class="flex">
+                        <div class="ml-3">
+                            <h3 class="text-sm font-medium text-red-800">Алдаа</h3>
+                            <div class="mt-2 text-sm text-red-700 space-y-1">
+                                {% for error in formset.non_form_errors %}
+                                    <p>{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        </div>
                     </div>
-                {% endif %}
-                {{ form.image }}
-                {% if form.image.errors %}
-                    <p class="mt-2 text-sm text-red-600">{{ form.image.errors.0 }}</p>
-                {% endif %}
+                </div>
+            {% endif %}
+            <div id="subcategory-formset" class="space-y-4">
+                {% for subform in formset.forms %}
+                    <div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                        {% for hidden in subform.hidden_fields %}{{ hidden }}{% endfor %}
+                        {% if subform.non_field_errors %}
+                            <div class="mb-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
+                                {% for error in subform.non_field_errors %}
+                                    <p>{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-12 md:items-end">
+                            <div class="md:col-span-8">
+                                <label for="{{ subform.name.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                    Дэд ангиллын нэр
+                                </label>
+                                {{ subform.name }}
+                                {% if subform.name.errors %}
+                                    <p class="mt-2 text-sm text-red-600">{{ subform.name.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+                            <div class="md:col-span-3">
+                                <label for="{{ subform.sort_order.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                                    Эрэмбэ
+                                </label>
+                                {{ subform.sort_order }}
+                                {% if subform.sort_order.errors %}
+                                    <p class="mt-2 text-sm text-red-600">{{ subform.sort_order.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+                            {% if subform.DELETE %}
+                                <div class="md:col-span-2 flex items-center gap-2">
+                                    {{ subform.DELETE }}
+                                    <span class="text-sm text-gray-600">Устгах</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% empty %}
+                    <p class="text-sm text-gray-500">Дэд ангилал одоогоор байхгүй байна. Шинэ дэд ангилал нэмнэ үү.</p>
+                {% endfor %}
             </div>
+
+            <template id="subcategory-empty-form">
+                <div class="rounded-lg border border-dashed border-gray-300 bg-white p-4" data-subcategory-form>
+                    {% with subform=formset.empty_form %}
+                        {% for hidden in subform.hidden_fields %}{{ hidden }}{% endfor %}
+                        <div class="grid grid-cols-1 gap-4 md:grid-cols-12 md:items-end">
+                            <div class="md:col-span-8">
+                                <label class="block text-sm font-medium text-gray-700">
+                                    Дэд ангиллын нэр
+                                </label>
+                                {{ subform.name }}
+                            </div>
+                            <div class="md:col-span-3">
+                                <label class="block text-sm font-medium text-gray-700">
+                                    Эрэмбэ
+                                </label>
+                                {{ subform.sort_order }}
+                            </div>
+                            {% if subform.DELETE %}
+                                <div class="md:col-span-2 flex items-center gap-2">
+                                    {{ subform.DELETE }}
+                                    <span class="text-sm text-gray-600">Устгах</span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    {% endwith %}
+                </div>
+            </template>
         </div>
 
         <div class="px-4 py-3 bg-gray-50 text-right sm:px-6 space-x-3">
@@ -78,5 +174,32 @@
         </div>
     </form>
 </div>
-{% endblock %}
 
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const addButton = document.querySelector('[data-add-subcategory]');
+        const container = document.querySelector('#subcategory-formset');
+        const emptyTemplate = document.querySelector('#subcategory-empty-form');
+        const totalFormsInput = document.querySelector('#id_subcategories-TOTAL_FORMS');
+
+        if (!addButton || !container || !emptyTemplate || !totalFormsInput) {
+            return;
+        }
+
+        addButton.addEventListener('click', () => {
+            const formCount = parseInt(totalFormsInput.value, 10);
+            const fragment = emptyTemplate.content.cloneNode(true);
+            const templateForm = fragment.querySelector('[data-subcategory-form]');
+            if (!templateForm) {
+                return;
+            }
+            const html = templateForm.outerHTML.replace(/__prefix__/g, formCount);
+
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = html;
+            container.appendChild(wrapper.firstElementChild);
+            totalFormsInput.value = formCount + 1;
+        });
+    });
+</script>
+{% endblock %}
