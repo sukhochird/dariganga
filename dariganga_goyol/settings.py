@@ -142,4 +142,6 @@ LOGOUT_REDIRECT_URL = 'login'
 # CORS
 CORS_ALLOWED_ORIGINS = [
     'https://darigangagoyol.mn',
+    'https://admin.darigangagoyol.mn',
+    'http://admin.darigangagoyol.mn',
 ]
